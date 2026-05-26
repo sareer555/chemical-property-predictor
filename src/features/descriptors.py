@@ -27,6 +27,7 @@ from typing import Dict, List, Optional, Tuple, Union
 import numpy as np
 import pandas as pd
 from rdkit import Chem
+from rdkit.DataStructs import ExplicitBitVect
 from rdkit.Chem import (
     AllChem,
     Descriptors,
@@ -94,7 +95,8 @@ class DescriptorGenerator:
 
         # Get list of available RDKit descriptors
         self.desc_list = [desc[0] for desc in Descriptors._descList]
-        self.calculator = MoleculeDescriptors.MolecularDescriptorCalculator(self.desc_list)
+        self.calculator = MoleculeDescriptors.MolecularDescriptorCalculator(
+            self.desc_list)
 
         logger.info(
             f"DescriptorGenerator initialized: Morgan(r={self.morgan_radius}, "
@@ -229,7 +231,8 @@ class DescriptorGenerator:
 
         # Number of saturated carbons
         desc["NumSaturatedCarbocycles"] = Lipinski.NumSaturatedCarbocycles(mol)
-        desc["NumSaturatedHeterocycles"] = Lipinski.NumSaturatedHeterocycles(mol)
+        desc["NumSaturatedHeterocycles"] = Lipinski.NumSaturatedHeterocycles(
+            mol)
 
         # Wiener index (molecular complexity)
         try:
@@ -382,22 +385,27 @@ class DescriptorGenerator:
         results = []
         failed = 0
 
-        iterator = tqdm(smiles_list, desc="Computing descriptors") if show_progress else smiles_list
+        iterator = tqdm(
+            smiles_list, desc="Computing descriptors") if show_progress else smiles_list
 
         for smiles in iterator:
             try:
-                desc = self.compute_all(smiles, include_fingerprints=include_fingerprints)
+                desc = self.compute_all(
+                    smiles, include_fingerprints=include_fingerprints)
                 desc["SMILES"] = smiles
                 results.append(desc)
             except Exception as e:
-                logger.debug(f"Failed to compute descriptors for {smiles}: {e}")
+                logger.debug(
+                    f"Failed to compute descriptors for {smiles}: {e}")
                 failed += 1
 
         if failed > 0:
-            logger.warning(f"Failed to compute descriptors for {failed}/{len(smiles_list)} molecules")
+            logger.warning(
+                f"Failed to compute descriptors for {failed}/{len(smiles_list)} molecules")
 
         df = pd.DataFrame(results)
-        logger.info(f"Computed {len(df.columns)} descriptors for {len(df)} molecules")
+        logger.info(
+            f"Computed {len(df.columns)} descriptors for {len(df)} molecules")
 
         return df
 
@@ -500,7 +508,8 @@ def compute_descriptors_for_dataframe(
 
     if merge_with_original:
         # Drop SMILES from descriptors to avoid duplication
-        descriptors_df = descriptors_df.drop(columns=["SMILES"], errors="ignore")
+        descriptors_df = descriptors_df.drop(
+            columns=["SMILES"], errors="ignore")
         result = pd.concat([df.reset_index(drop=True), descriptors_df], axis=1)
         return result
 

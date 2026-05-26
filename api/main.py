@@ -28,6 +28,7 @@ from fastapi import FastAPI, HTTPException, UploadFile, File, Form
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, StreamingResponse
 from pydantic import BaseModel, Field
+import matplotlib.pyplot as plt
 
 from src.data.pubchem_collector import PubChemCollector
 from src.data.preprocessor import DataPreprocessor
@@ -87,8 +88,10 @@ DESCRIPTOR_GEN = DescriptorGenerator()
 
 class PredictRequest(BaseModel):
     """Request body for property prediction."""
-    smiles: str = Field(..., description="SMILES string of the molecule", example="CCO")
-    model_name: Optional[str] = Field("default", description="Name of the model to use")
+    smiles: str = Field(...,
+                        description="SMILES string of the molecule", example="CCO")
+    model_name: Optional[str] = Field(
+        "default", description="Name of the model to use")
 
     class Config:
         json_schema_extra = {
@@ -98,17 +101,23 @@ class PredictRequest(BaseModel):
 
 class BatchPredictRequest(BaseModel):
     """Request body for batch prediction."""
-    smiles_list: List[str] = Field(..., description="List of SMILES strings", min_length=1, max_length=100)
-    model_name: Optional[str] = Field("default", description="Name of the model to use")
+    smiles_list: List[str] = Field(
+        ..., description="List of SMILES strings", min_length=1, max_length=100)
+    model_name: Optional[str] = Field(
+        "default", description="Name of the model to use")
 
 
 class TrainRequest(BaseModel):
     """Request body for model training."""
-    model_type: str = Field("random_forest", description="Model type: random_forest, gradient_boosting, xgboost")
+    model_type: str = Field(
+        "random_forest", description="Model type: random_forest, gradient_boosting, xgboost")
     target_column: str = Field(..., description="Target column name")
-    problem_type: str = Field("regression", description="Problem type: regression or classification")
-    tune_hyperparams: bool = Field(False, description="Enable hyperparameter tuning")
-    feature_selection: Optional[str] = Field(None, description="Feature selection method")
+    problem_type: str = Field(
+        "regression", description="Problem type: regression or classification")
+    tune_hyperparams: bool = Field(
+        False, description="Enable hyperparameter tuning")
+    feature_selection: Optional[str] = Field(
+        None, description="Feature selection method")
 
     class Config:
         json_schema_extra = {
@@ -124,14 +133,18 @@ class TrainRequest(BaseModel):
 class DescriptorRequest(BaseModel):
     """Request body for descriptor computation."""
     smiles: str = Field(..., description="SMILES string", example="CCO")
-    include_fingerprints: bool = Field(True, description="Include fingerprint descriptors")
+    include_fingerprints: bool = Field(
+        True, description="Include fingerprint descriptors")
 
 
 class ExplainRequest(BaseModel):
     """Request body for SHAP explanation."""
-    smiles: str = Field(..., description="SMILES string to explain", example="CCO")
-    model_name: Optional[str] = Field("default", description="Model to explain")
-    plot_type: str = Field("waterfall", description="Plot type: waterfall, summary, or dependence")
+    smiles: str = Field(...,
+                        description="SMILES string to explain", example="CCO")
+    model_name: Optional[str] = Field(
+        "default", description="Model to explain")
+    plot_type: str = Field(
+        "waterfall", description="Plot type: waterfall, summary, or dependence")
 
 
 class PredictResponse(BaseModel):
@@ -245,7 +258,8 @@ async def predict(request: PredictRequest):
     # Validate SMILES
     valid, canonical = validate_smiles(request.smiles)
     if not valid:
-        raise HTTPException(status_code=400, detail=f"Invalid SMILES: {canonical}")
+        raise HTTPException(
+            status_code=400, detail=f"Invalid SMILES: {canonical}")
 
     try:
         # Load model
@@ -265,7 +279,8 @@ async def predict(request: PredictRequest):
 
             pred = model.predict(X)
             if pred.ndim > 1:
-                target_names = ["boiling_point", "solubility", "toxicity_category"]
+                target_names = ["boiling_point",
+                                "solubility", "toxicity_category"]
                 for i, name in enumerate(target_names[:pred.shape[1]]):
                     predictions[name] = float(pred[0][i])
             else:
@@ -292,7 +307,8 @@ async def predict_batch(request: BatchPredictRequest):
     logger.info(f"Batch prediction for {len(request.smiles_list)} molecules")
 
     if len(request.smiles_list) > 100:
-        raise HTTPException(status_code=400, detail="Maximum 100 SMILES per batch")
+        raise HTTPException(
+            status_code=400, detail="Maximum 100 SMILES per batch")
 
     results = []
 
@@ -325,8 +341,10 @@ async def predict_batch(request: BatchPredictRequest):
 
 @app.post("/train")
 async def train_model(
-    file: UploadFile = File(..., description="CSV file with features and target column"),
-    config: str = Form(..., description="JSON string with training configuration"),
+    file: UploadFile = File(...,
+                            description="CSV file with features and target column"),
+    config: str = Form(...,
+                       description="JSON string with training configuration"),
 ):
     """
     Train a model on uploaded data.
@@ -336,9 +354,11 @@ async def train_model(
     try:
         train_config = TrainRequest(**json.loads(config))
     except json.JSONDecodeError:
-        raise HTTPException(status_code=400, detail="Invalid JSON in config parameter")
+        raise HTTPException(
+            status_code=400, detail="Invalid JSON in config parameter")
 
-    logger.info(f"Training request: {train_config.model_type} for {train_config.target_column}")
+    logger.info(
+        f"Training request: {train_config.model_type} for {train_config.target_column}")
 
     try:
         # Read uploaded file
@@ -352,7 +372,8 @@ async def train_model(
             )
 
         # Prepare features
-        feature_cols = [c for c in df.columns if c != train_config.target_column]
+        feature_cols = [c for c in df.columns if c !=
+                        train_config.target_column]
         X = df[feature_cols]
         y = df[train_config.target_column]
 
@@ -418,7 +439,8 @@ async def get_molecule_info(smiles: str):
 
     valid, canonical = validate_smiles(smiles)
     if not valid:
-        raise HTTPException(status_code=400, detail=f"Invalid SMILES: {canonical}")
+        raise HTTPException(
+            status_code=400, detail=f"Invalid SMILES: {canonical}")
 
     try:
         descriptors = DESCRIPTOR_GEN.compute_all(canonical)
@@ -434,8 +456,8 @@ async def get_molecule_info(smiles: str):
             if key.startswith(("Morgan_", "MACCS_")):
                 categories["fingerprints"][key] = value
             elif key in ["MolWt", "ExactMolWt", "MolLogP", "MolMR", "TPSA",
-                        "NumHDonors", "NumHAcceptors", "NumRotatableBonds",
-                        "NumRings", "NumAromaticRings"]:
+                         "NumHDonors", "NumHAcceptors", "NumRotatableBonds",
+                         "NumRings", "NumAromaticRings"]:
                 categories["physicochemical"][key] = value
             else:
                 categories["topological"][key] = value
@@ -469,7 +491,8 @@ async def compute_descriptors(request: DescriptorRequest):
 
     valid, canonical = validate_smiles(request.smiles)
     if not valid:
-        raise HTTPException(status_code=400, detail=f"Invalid SMILES: {canonical}")
+        raise HTTPException(
+            status_code=400, detail=f"Invalid SMILES: {canonical}")
 
     try:
         descriptors = DESCRIPTOR_GEN.compute_all(
@@ -510,13 +533,15 @@ async def explain_prediction(request: ExplainRequest):
 
     valid, canonical = validate_smiles(request.smiles)
     if not valid:
-        raise HTTPException(status_code=400, detail=f"Invalid SMILES: {canonical}")
+        raise HTTPException(
+            status_code=400, detail=f"Invalid SMILES: {canonical}")
 
     try:
         model = _load_or_create_model(request.model_name or "default")
 
         if model.model is None:
-            raise HTTPException(status_code=400, detail="Model not trained yet")
+            raise HTTPException(
+                status_code=400, detail="Model not trained yet")
 
         # Compute descriptors
         descriptors = DESCRIPTOR_GEN.compute_all(canonical)
@@ -609,7 +634,8 @@ async def collect_data(
         )
 
         # Convert to records for JSON serialization
-        records = df.head(100).to_dict(orient="records")  # Limit to 100 for response
+        records = df.head(100).to_dict(
+            orient="records")  # Limit to 100 for response
 
         return {
             "status": "success",
