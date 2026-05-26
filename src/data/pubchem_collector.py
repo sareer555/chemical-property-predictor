@@ -110,33 +110,28 @@ class PubChemCollector:
                     )
 
             except requests.exceptions.Timeout:
-                logger.warning(f"Attempt {attempt}/{self.max_retries}: Timeout")
+                logger.warning(
+                    f"Attempt {attempt}/{self.max_retries}: Timeout")
             except requests.exceptions.ConnectionError:
-                logger.warning(f"Attempt {attempt}/{self.max_retries}: Connection error")
+                logger.warning(
+                    f"Attempt {attempt}/{self.max_retries}: Connection error")
             except json.JSONDecodeError:
                 raise DataCollectionError(f"Invalid JSON response from {url}")
 
-        raise DataCollectionError(f"Failed after {self.max_retries} attempts: {url}")
+        raise DataCollectionError(
+            f"Failed after {self.max_retries} attempts: {url}")
 
-    def get_random_cids(self, n: int) -> List[int]:
-        """
-        Get random compound CIDs from PubChem.
-
-        Args:
-            n: Number of random CIDs to fetch
-
-        Returns:
-            List of compound CIDs
-        """
-        logger.info(f"Fetching {n} random compound CIDs...")
-        url = f"{self.BASE_URL}/compound/list/random/cids/JSON"
-        params = {"count": min(n, 100000)}
-
-        data = self._make_request(url, params)
-        cids = data.get("IdentifierList", {}).get("CID", [])
-
-        logger.info(f"Retrieved {len(cids)} random CIDs")
-        return cids[:n]
+    def get_cids_by_search(self, term: str, n: int) -> List[int]:
+        """Fetches CIDs by searching for a specific chemical name/class."""
+        # This is a highly reliable endpoint: searching by name
+        url = f"{self.BASE_URL}/compound/name/{term}/cids/JSON"
+        try:
+            data = self._make_request(url)
+            cids = data.get("IdentifierList", {}).get("CID", [])
+            return cids[:n]
+        except Exception as e:
+            logger.error(f"Search failed for {term}: {e}")
+            return []
 
     def get_compound_properties(self, cids: List[int]) -> List[Dict]:
         """
@@ -310,7 +305,11 @@ class PubChemCollector:
 
                 try:
                     # Get random CIDs
-                    cids = self.get_random_cids(current_batch_size * 2)
+                    # Inside your batch loop in collect_compounds:
+                    # Instead of get_random_cids, use:
+                    cids = self.get_cids_by_search(
+                        "ethanol", current_batch_size * 2)
+                # You can replace "ethanol" with a list of generic compound names
 
                     if not cids:
                         logger.warning("No CIDs retrieved, skipping batch")
@@ -320,11 +319,13 @@ class PubChemCollector:
                     compounds = self.get_compound_properties(cids)
 
                     if not compounds:
-                        logger.warning("No properties retrieved, skipping batch")
+                        logger.warning(
+                            "No properties retrieved, skipping batch")
                         continue
 
                     # Get synonyms
-                    cid_list = [c.get("cid") for c in compounds if c.get("cid")]
+                    cid_list = [c.get("cid")
+                                for c in compounds if c.get("cid")]
                     synonyms = self.get_compound_synonyms(cid_list)
 
                     # Enrich with synonyms
@@ -437,7 +438,8 @@ class PubChemCollector:
             if mol:
                 rdkit_props["num_atoms"].append(mol.GetNumAtoms())
                 rdkit_props["num_bonds"].append(mol.GetNumBonds())
-                rdkit_props["num_rings"].append(rdMolDescriptors.CalcNumRings(mol))
+                rdkit_props["num_rings"].append(
+                    rdMolDescriptors.CalcNumRings(mol))
                 rdkit_props["num_aromatic_rings"].append(
                     rdMolDescriptors.CalcNumAromaticRings(mol)
                 )
@@ -609,7 +611,8 @@ class PubChemCollector:
                     logp = 0.1 * mw ** 0.5 - 1
 
                 # Simplified solubility estimation (logS in mol/L)
-                log_s = 0.8 - 0.01 * (mw - 100) - 0.5 * logp - 0.01 * tpsa + 0.3 * (hba + hbd)
+                log_s = 0.8 - 0.01 * (mw - 100) - 0.5 * \
+                    logp - 0.01 * tpsa + 0.3 * (hba + hbd)
 
                 # Add noise
                 import random
@@ -648,7 +651,8 @@ class PubChemCollector:
         filepath = save_dir / filename
 
         df.to_csv(filepath, index=False)
-        logger.info(f"Dataset saved to {filepath} ({len(df)} rows, {len(df.columns)} columns)")
+        logger.info(
+            f"Dataset saved to {filepath} ({len(df)} rows, {len(df.columns)} columns)")
 
         return filepath
 
@@ -656,11 +660,14 @@ class PubChemCollector:
 if __name__ == "__main__":
     # Example usage
     collector = PubChemCollector(batch_size=100, request_delay=0.2)
-    df = collector.collect_compounds(n=200, output_path=settings.RAW_DATA_DIR / "pubchem_compounds.csv")
+    df = collector.collect_compounds(
+        n=200, output_path=settings.RAW_DATA_DIR / "pubchem_compounds.csv")
     print(f"\nDataset shape: {df.shape}")
     print(f"\nColumns: {list(df.columns)}")
     print(f"\nSample data:\n{df.head()}")
     print(f"\nTarget distributions:")
     print(f"Toxicity: {df['toxicity_category'].value_counts().sort_index()}")
-    print(f"Boiling Point range: {df['boiling_point'].min():.1f} - {df['boiling_point'].max():.1f} C")
-    print(f"Solubility range: {df['solubility'].min():.2e} - {df['solubility'].max():.2e} mol/L")
+    print(
+        f"Boiling Point range: {df['boiling_point'].min():.1f} - {df['boiling_point'].max():.1f} C")
+    print(
+        f"Solubility range: {df['solubility'].min():.2e} - {df['solubility'].max():.2e} mol/L")

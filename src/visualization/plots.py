@@ -19,26 +19,26 @@ Usage:
     >>> viz.plot_regression_results(y_true, y_pred, target_name="Solubility")
 """
 
-import io
-from pathlib import Path
-from typing import Any, Dict, List, Optional, Tuple, Union
-
-import matplotlib
-matplotlib.use("Agg")
-import matplotlib.pyplot as plt
-import numpy as np
-import pandas as pd
-import seaborn as sns
+from src.utils.logger import get_logger
+from sklearn.preprocessing import StandardScaler
+from sklearn.decomposition import PCA
 from sklearn.metrics import (
     confusion_matrix,
     ConfusionMatrixDisplay,
     roc_curve,
     auc,
 )
-from sklearn.decomposition import PCA
-from sklearn.preprocessing import StandardScaler
+import seaborn as sns
+import pandas as pd
+import numpy as np
+import matplotlib.pyplot as plt
+import io
+from pathlib import Path
+from typing import Any, Dict, List, Optional, Tuple, Union
 
-from src.utils.logger import get_logger
+import matplotlib
+matplotlib.use("Agg")
+
 
 logger = get_logger(__name__)
 
@@ -116,12 +116,14 @@ class Visualizer:
 
         # Actual vs Predicted
         ax = axes[0]
-        ax.scatter(y_true, y_pred, alpha=0.5, c=COLORS["secondary"], s=30, edgecolors="white", linewidth=0.5)
+        ax.scatter(y_true, y_pred, alpha=0.5,
+                   c=COLORS["secondary"], s=30, edgecolors="white", linewidth=0.5)
 
         # Perfect prediction line
         min_val = min(y_true.min(), y_pred.min())
         max_val = max(y_true.max(), y_pred.max())
-        ax.plot([min_val, max_val], [min_val, max_val], "k--", lw=2, label="Perfect prediction")
+        ax.plot([min_val, max_val], [min_val, max_val],
+                "k--", lw=2, label="Perfect prediction")
 
         # R^2
         from sklearn.metrics import r2_score
@@ -130,13 +132,15 @@ class Visualizer:
 
         ax.set_xlabel(f"Actual {target_name} ({unit})", fontsize=12)
         ax.set_ylabel(f"Predicted {target_name} ({unit})", fontsize=12)
-        ax.set_title(f"{target_name} Prediction\n$R^2$ = {r2:.4f}, RMSE = {rmse:.4f}", fontsize=13, fontweight="bold")
+        ax.set_title(f"{target_name} Prediction\n$R^2$ = {r2:.4f}, RMSE = {rmse:.4f}",
+                     fontsize=13, fontweight="bold")
         ax.legend()
 
         # Residuals
         ax = axes[1]
         residuals = y_true - y_pred
-        ax.scatter(y_pred, residuals, alpha=0.5, c=COLORS["accent"], s=30, edgecolors="white", linewidth=0.5)
+        ax.scatter(y_pred, residuals, alpha=0.5,
+                   c=COLORS["accent"], s=30, edgecolors="white", linewidth=0.5)
         ax.axhline(y=0, color="black", linestyle="--", linewidth=2)
         ax.set_xlabel(f"Predicted {target_name} ({unit})", fontsize=12)
         ax.set_ylabel("Residuals", fontsize=12)
@@ -180,10 +184,12 @@ class Visualizer:
 
         fig, ax = plt.subplots(figsize=(10, 8))
 
-        disp = ConfusionMatrixDisplay(confusion_matrix=cm, display_labels=class_names)
+        disp = ConfusionMatrixDisplay(
+            confusion_matrix=cm, display_labels=class_names)
         disp.plot(ax=ax, cmap="Blues", values_format="d", colorbar=True)
 
-        ax.set_title(f"Confusion Matrix: {target_name}", fontsize=14, fontweight="bold")
+        ax.set_title(
+            f"Confusion Matrix: {target_name}", fontsize=14, fontweight="bold")
 
         # Add accuracy text
         accuracy = np.trace(cm) / np.sum(cm)
@@ -228,11 +234,13 @@ class Visualizer:
         fig, ax = plt.subplots(figsize=(10, max(6, top_n * 0.4)))
 
         colors = plt.cm.viridis(np.linspace(0.3, 0.9, len(df)))
-        ax.barh(df["feature"], df["importance"], color=colors, edgecolor="white", linewidth=0.5)
+        ax.barh(df["feature"], df["importance"], color=colors,
+                edgecolor="white", linewidth=0.5)
 
-        ax.set_xlabel("Importance", fontsize=12)
+        ax.set_xlabel("importance", fontsize=12)
         ax.set_ylabel("")
-        ax.set_title(f"Top {top_n} Feature Importance", fontsize=14, fontweight="bold")
+        ax.set_title(f"Top {top_n} Feature Importance",
+                     fontsize=14, fontweight="bold")
 
         plt.tight_layout()
 
@@ -292,8 +300,10 @@ class Visualizer:
                 )
 
             if labels:
-                for i, label in enumerate(labels[:50]):  # Limit labels to avoid clutter
-                    ax.annotate(label, (X_pca[i, 0], X_pca[i, 1]), fontsize=8, alpha=0.7)
+                # Limit labels to avoid clutter
+                for i, label in enumerate(labels[:50]):
+                    ax.annotate(
+                        label, (X_pca[i, 0], X_pca[i, 1]), fontsize=8, alpha=0.7)
 
             ax.set_xlabel(f"PC1 ({explained_var[0]:.1f}%)", fontsize=12)
             ax.set_ylabel(f"PC2 ({explained_var[1]:.1f}%)", fontsize=12)
@@ -322,7 +332,8 @@ class Visualizer:
             ax.set_xlabel(f"PC1 ({explained_var[0]:.1f}%)", fontsize=10)
             ax.set_ylabel(f"PC2 ({explained_var[1]:.1f}%)", fontsize=10)
             ax.set_zlabel(f"PC3 ({explained_var[2]:.1f}%)", fontsize=10)
-            ax.set_title(f"3D PCA Visualization", fontsize=14, fontweight="bold")
+            ax.set_title(f"3D PCA Visualization",
+                         fontsize=14, fontweight="bold")
 
         plt.tight_layout()
 
@@ -357,7 +368,8 @@ class Visualizer:
 
         # Histogram with KDE
         ax = axes[0]
-        ax.hist(data, bins=50, color=COLORS["secondary"], alpha=0.7, edgecolor="white")
+        ax.hist(data, bins=50,
+                color=COLORS["secondary"], alpha=0.7, edgecolor="white")
         ax.set_xlabel(xlabel, fontsize=12)
         ax.set_ylabel("Frequency", fontsize=12)
         ax.set_title(f"{title} - Histogram", fontsize=13, fontweight="bold")
@@ -414,13 +426,15 @@ class Visualizer:
         """
         if target_col and target_col in df.columns:
             # Select features most correlated with target
-            corr_with_target = df.corr()[target_col].abs().sort_values(ascending=False)
+            corr_with_target = df.corr()[target_col].abs(
+            ).sort_values(ascending=False)
             selected_cols = corr_with_target.head(top_n).index.tolist()
             df_corr = df[selected_cols].corr()
         else:
             df_corr = df.iloc[:, :top_n].corr()
 
-        fig, ax = plt.subplots(figsize=(max(10, len(df_corr) * 0.6), max(8, len(df_corr) * 0.5)))
+        fig, ax = plt.subplots(
+            figsize=(max(10, len(df_corr) * 0.6), max(8, len(df_corr) * 0.5)))
 
         mask = np.triu(np.ones_like(df_corr, dtype=bool))
         sns.heatmap(
@@ -479,7 +493,8 @@ class Visualizer:
 
         for i, metric in enumerate(metrics):
             values = [results[model].get(metric, 0) for model in model_names]
-            color = MODEL_COLORS.get(model_names[i % len(model_names)], COLORS["secondary"])
+            color = MODEL_COLORS.get(
+                model_names[i % len(model_names)], COLORS["secondary"])
             ax.bar(
                 x + i * width - (n_metrics - 1) * width / 2,
                 values,
@@ -492,7 +507,8 @@ class Visualizer:
         ax.set_ylabel("Score", fontsize=12)
         ax.set_title("Model Comparison", fontsize=14, fontweight="bold")
         ax.set_xticks(x)
-        ax.set_xticklabels([m.replace("_", " ").title() for m in model_names], rotation=45, ha="right")
+        ax.set_xticklabels([m.replace("_", " ").title()
+                           for m in model_names], rotation=45, ha="right")
         ax.legend()
         ax.grid(axis="y", alpha=0.3)
 

@@ -15,12 +15,30 @@ Features:
 Usage:
     >>> streamlit run frontend/app.py
 """
+import sys
+import os
 
+# --- PATH FIXER START ---
+# This adds the folder above 'frontend' to Python's search path
+current_dir = os.path.dirname(os.path.abspath(__file__))
+parent_dir = os.path.dirname(current_dir)
+if parent_dir not in sys.path:
+    sys.path.insert(0, parent_dir)
+# --- PATH FIXER END ---
+
+
+from src.utils.validators import validate_smiles
+from src.utils.config import settings
+from src.visualization.plots import Visualizer
+from src.models.explainability import SHAPExplainer
+from src.models.trainer import ModelTrainer, MultiTargetTrainer
+from src.features.selection import FeatureSelector
+from src.features.descriptors import DescriptorGenerator, compute_descriptors_for_dataframe
+from src.data.preprocessor import DataPreprocessor
+from src.data.pubchem_collector import PubChemCollector
 import io
 import json
-import sys
 from pathlib import Path
-
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
@@ -31,19 +49,7 @@ import streamlit as st
 from rdkit import Chem
 from rdkit.Chem import Draw, Descriptors, Crippen, rdMolDescriptors
 
-# Add project root to path
-project_root = Path(__file__).resolve().parents[1]
-sys.path.insert(0, str(project_root))
 
-from src.data.pubchem_collector import PubChemCollector
-from src.data.preprocessor import DataPreprocessor
-from src.features.descriptors import DescriptorGenerator, compute_descriptors_for_dataframe
-from src.features.selection import FeatureSelector
-from src.models.trainer import ModelTrainer, MultiTargetTrainer
-from src.models.explainability import SHAPExplainer
-from src.visualization.plots import Visualizer
-from src.utils.config import settings
-from src.utils.validators import validate_smiles
 
 # =============================================================================
 # Page Configuration
@@ -116,7 +122,7 @@ def render_sidebar():
     """Render the sidebar navigation and settings."""
     with st.sidebar:
         st.image("https://pubchem.ncbi.nlm.nih.gov/image/imagefly.cgi?cid=702&width=300&height=300",
-                use_container_width=True)
+                 use_container_width=True)
 
         st.markdown("---")
 
@@ -182,7 +188,8 @@ def render_sidebar():
 
 def render_home():
     """Render the home page."""
-    st.markdown('<p class="main-header">⚗️ Chemical Property Predictor</p>', unsafe_allow_html=True)
+    st.markdown('<p class="main-header">⚗️ Chemical Property Predictor</p>',
+                unsafe_allow_html=True)
     st.markdown(
         '<p class="sub-header">Machine Learning for Computational Chemistry & Cheminformatics</p>',
         unsafe_allow_html=True
@@ -272,7 +279,8 @@ def render_home():
 
 def render_single_prediction():
     """Render the single molecule prediction page."""
-    st.markdown('<p class="main-header">🔮 Single Molecule Prediction</p>', unsafe_allow_html=True)
+    st.markdown('<p class="main-header">🔮 Single Molecule Prediction</p>',
+                unsafe_allow_html=True)
     st.markdown("Enter a SMILES string to predict chemical properties.")
 
     # Input
@@ -308,14 +316,18 @@ def render_single_prediction():
                     mol = Chem.MolFromSmiles(canonical)
                     if mol:
                         img = Draw.MolToImage(mol, size=(300, 300))
-                        st.image(img, caption="Molecular Structure", use_container_width=True)
+                        st.image(img, caption="Molecular Structure",
+                                 use_container_width=True)
 
                         # Basic properties
                         st.markdown("**Basic Properties**")
-                        st.write(f"- **Formula**: {rdMolDescriptors.CalcMolFormula(mol)}")
-                        st.write(f"- **Molecular Weight**: {Descriptors.MolWt(mol):.2f} g/mol")
+                        st.write(
+                            f"- **Formula**: {rdMolDescriptors.CalcMolFormula(mol)}")
+                        st.write(
+                            f"- **Molecular Weight**: {Descriptors.MolWt(mol):.2f} g/mol")
                         st.write(f"- **LogP**: {Crippen.MolLogP(mol):.2f}")
-                        st.write(f"- **TPSA**: {rdMolDescriptors.CalcTPSA(mol):.2f} Å²")
+                        st.write(
+                            f"- **TPSA**: {rdMolDescriptors.CalcTPSA(mol):.2f} Å²")
 
                 with col_info:
                     # Compute descriptors
@@ -333,15 +345,19 @@ def render_single_prediction():
                     tpsa = descriptors.get("TPSA", 50)
 
                     # Simple estimation formulas for demo
-                    solubility = 10 ** (0.5 - 0.01 * (mw - 100) - 0.5 * logp - 0.01 * tpsa)
+                    solubility = 10 ** (0.5 - 0.01 *
+                                        (mw - 100) - 0.5 * logp - 0.01 * tpsa)
                     solubility = max(1e-10, min(100, solubility))
 
                     bp = 100 + 0.5 * mw + 10 * logp
                     bp = max(-100, min(800, bp))
 
-                    toxicity_score = (1 if mw > 500 else 0) + (2 if logp > 5 else 1 if logp > 3 else 0)
-                    toxicity_labels = {0: "Low", 1: "Moderate", 2: "High", 3: "Very High"}
-                    toxicity = toxicity_labels.get(min(toxicity_score, 3), "Unknown")
+                    toxicity_score = (1 if mw > 500 else 0) + \
+                        (2 if logp > 5 else 1 if logp > 3 else 0)
+                    toxicity_labels = {
+                        0: "Low", 1: "Moderate", 2: "High", 3: "Very High"}
+                    toxicity = toxicity_labels.get(
+                        min(toxicity_score, 3), "Unknown")
 
                     with pred_cols[0]:
                         st.metric(
@@ -391,7 +407,8 @@ def render_single_prediction():
                 # Descriptor table
                 with st.expander("View All Descriptors"):
                     desc_df = pd.DataFrame([
-                        {"Descriptor": k, "Value": round(v, 4) if isinstance(v, float) else v}
+                        {"Descriptor": k, "Value": round(
+                            v, 4) if isinstance(v, float) else v}
                         for k, v in sorted(descriptors.items())
                         if not k.startswith(("Morgan_", "MACCS_"))
                     ])
@@ -412,8 +429,10 @@ def render_single_prediction():
 
 def render_batch_prediction():
     """Render the batch prediction page."""
-    st.markdown('<p class="main-header">📁 Batch Prediction</p>', unsafe_allow_html=True)
-    st.markdown("Upload a CSV file with SMILES strings for batch property prediction.")
+    st.markdown('<p class="main-header">📁 Batch Prediction</p>',
+                unsafe_allow_html=True)
+    st.markdown(
+        "Upload a CSV file with SMILES strings for batch property prediction.")
 
     uploaded_file = st.file_uploader(
         "Upload CSV",
@@ -440,7 +459,8 @@ def render_batch_prediction():
             for i, smiles in enumerate(df["smiles"]):
                 progress = (i + 1) / len(df)
                 progress_bar.progress(min(progress, 0.99))
-                status_text.text(f"Processing {i + 1}/{len(df)}: {smiles[:30]}...")
+                status_text.text(
+                    f"Processing {i + 1}/{len(df)}: {smiles[:30]}...")
 
                 try:
                     valid, canonical = validate_smiles(smiles)
@@ -455,7 +475,8 @@ def render_batch_prediction():
                     mw = descriptors.get("MolWt", 200)
                     tpsa = descriptors.get("TPSA", 50)
 
-                    solubility = 10 ** (0.5 - 0.01 * (mw - 100) - 0.5 * logp - 0.01 * tpsa)
+                    solubility = 10 ** (0.5 - 0.01 *
+                                        (mw - 100) - 0.5 * logp - 0.01 * tpsa)
                     bp = 100 + 0.5 * mw + 10 * logp
 
                     results.append({
@@ -532,7 +553,8 @@ def render_batch_prediction():
 
 def render_descriptor_explorer():
     """Render the descriptor exploration page."""
-    st.markdown('<p class="main-header">🧪 Descriptor Explorer</p>', unsafe_allow_html=True)
+    st.markdown('<p class="main-header">🧪 Descriptor Explorer</p>',
+                unsafe_allow_html=True)
     st.markdown("Explore molecular descriptors computed by RDKit.")
 
     smiles_input = st.text_input(
@@ -565,7 +587,8 @@ def render_descriptor_explorer():
 
                     # Key properties
                     st.subheader("Key Properties")
-                    st.write(f"**Formula**: {rdMolDescriptors.CalcMolFormula(mol)}")
+                    st.write(
+                        f"**Formula**: {rdMolDescriptors.CalcMolFormula(mol)}")
                     st.write(f"**MW**: {Descriptors.MolWt(mol):.2f}")
                     st.write(f"**LogP**: {Crippen.MolLogP(mol):.2f}")
                     st.write(f"**TPSA**: {rdMolDescriptors.CalcTPSA(mol):.2f}")
@@ -579,35 +602,40 @@ def render_descriptor_explorer():
                     if descriptor_type == "Physicochemical" or descriptor_type == "All":
                         st.subheader("Physicochemical Descriptors")
                         physio = {k: v for k, v in descriptors.items()
-                                 if k in ["MolWt", "ExactMolWt", "MolLogP", "MolMR", "TPSA",
-                                         "NumHDonors", "NumHAcceptors", "NumRotatableBonds",
-                                         "NumRings", "NumAromaticRings", "FractionCSP3"]}
+                                  if k in ["MolWt", "ExactMolWt", "MolLogP", "MolMR", "TPSA",
+                                           "NumHDonors", "NumHAcceptors", "NumRotatableBonds",
+                                           "NumRings", "NumAromaticRings", "FractionCSP3"]}
                         physio_df = pd.DataFrame([physio]).T.reset_index()
                         physio_df.columns = ["Descriptor", "Value"]
-                        st.dataframe(physio_df, use_container_width=True, hide_index=True)
+                        st.dataframe(
+                            physio_df, use_container_width=True, hide_index=True)
 
                     if descriptor_type == "Topological" or descriptor_type == "All":
                         st.subheader("Topological Descriptors")
                         topo = {k: round(v, 4) for k, v in descriptors.items()
-                               if k.startswith(("BertzCT", "Ipc", "LabuteASA", "Kappa", "Chi", "PEOE", "SMR", "SlogP", "MQN"))}
+                                if k.startswith(("BertzCT", "Ipc", "LabuteASA", "Kappa", "Chi", "PEOE", "SMR", "SlogP", "MQN"))}
                         topo_sample = dict(list(topo.items())[:20])
                         topo_df = pd.DataFrame([topo_sample]).T.reset_index()
                         topo_df.columns = ["Descriptor", "Value"]
-                        st.dataframe(topo_df, use_container_width=True, hide_index=True)
+                        st.dataframe(
+                            topo_df, use_container_width=True, hide_index=True)
 
                     if descriptor_type == "Fingerprints" or descriptor_type == "All":
                         st.subheader("Fingerprints")
-                        morgan_bits = sum(1 for k, v in descriptors.items() if k.startswith("Morgan_") and v)
-                        maccs_bits = sum(1 for k, v in descriptors.items() if k.startswith("MACCS_") and v)
+                        morgan_bits = sum(
+                            1 for k, v in descriptors.items() if k.startswith("Morgan_") and v)
+                        maccs_bits = sum(
+                            1 for k, v in descriptors.items() if k.startswith("MACCS_") and v)
 
                         fp_df = pd.DataFrame({
                             "Fingerprint Type": ["Morgan (ECFP)", "MACCS"],
                             "Total Bits": [2048, 167],
                             "Bits Set": [morgan_bits, maccs_bits],
                             "Sparsity (%)": [round(100 * (1 - morgan_bits / 2048), 2),
-                                           round(100 * (1 - maccs_bits / 167), 2)],
+                                             round(100 * (1 - maccs_bits / 167), 2)],
                         })
-                        st.dataframe(fp_df, use_container_width=True, hide_index=True)
+                        st.dataframe(
+                            fp_df, use_container_width=True, hide_index=True)
 
                         # Bit density visualization
                         fig = go.Figure()
@@ -641,7 +669,8 @@ def render_descriptor_explorer():
 
 def render_model_training():
     """Render the model training page."""
-    st.markdown('<p class="main-header">📊 Model Training</p>', unsafe_allow_html=True)
+    st.markdown('<p class="main-header">📊 Model Training</p>',
+                unsafe_allow_html=True)
     st.markdown("Train machine learning models on your dataset.")
 
     uploaded_file = st.file_uploader(
@@ -660,118 +689,132 @@ def render_model_training():
         with col1:
             target_col = st.selectbox("Target Column", df.columns)
         with col2:
-            problem_type = st.selectbox("Problem Type", ["regression", "classification"])
+            problem_type = st.selectbox(
+                "Problem Type", ["regression", "classification"])
         with col3:
-            model_type = st.selectbox("Model", ["random_forest", "gradient_boosting", "xgboost"])
+            model_type = st.selectbox(
+                "Model", ["random_forest", "gradient_boosting", "xgboost"])
 
         feature_cols = [c for c in df.columns if c != target_col]
 
-        st.write(f"Features ({len(feature_cols)}): {', '.join(feature_cols[:10])}{'...' if len(feature_cols) > 10 else ''}")
+        st.write(
+            f"Features ({len(feature_cols)}): {', '.join(feature_cols[:10])}{'...' if len(feature_cols) > 10 else ''}")
 
-        tune_hyperparams = st.checkbox("Hyperparameter Tuning (slower but better results)", value=False)
+        tune_hyperparams = st.checkbox(
+            "Hyperparameter Tuning (slower but better results)", value=False)
 
-        if st.button("Train Model", type="primary"):
-            with st.spinner("Training model..."):
-                try:
-                    X = df[feature_cols]
-                    y = df[target_col]
+    if st.button("Train Model", type="primary"):
+        with st.spinner("Training model..."):
+            try:
+                # 1. Filter out non-numeric columns
+                df_numeric = df.select_dtypes(include=[np.number])
 
-                    preprocessor = DataPreprocessor()
-                    splits = preprocessor.split_data(X, y)
+                # Ensure selected target is numeric
+                if target_col not in df_numeric.columns:
+                    st.error(
+                        f"Target '{target_col}' must be a numeric column.")
+                    st.stop()
 
-                    scaled = preprocessor.scale_features(
-                        splits["X_train"], splits["X_val"], splits["X_test"]
-                    )
+                # 2. Define X and y (numeric only)
+                X = df_numeric.drop(columns=[target_col])
+                y = df[target_col]
 
-                    trainer = ModelTrainer(
-                        model_type=model_type,
-                        problem_type=problem_type,
-                    )
+                # 3. Preprocess and Split
+                preprocessor = DataPreprocessor()
+                splits = preprocessor.split_data(X, y)
+                scaled = preprocessor.scale_features(
+                    splits["X_train"], splits["X_val"], splits["X_test"]
+                )
 
-                    results = trainer.train(
-                        scaled["X_train"],
-                        splits["y_train"],
-                        scaled.get("X_val"),
-                        splits.get("y_val"),
-                        tune_hyperparams=tune_hyperparams,
-                    )
+                # 4. Train Model
+                trainer = ModelTrainer(
+                    model_type=model_type,
+                    problem_type=problem_type
+                )
+                results = trainer.train(
+                    scaled["X_train"],
+                    splits["y_train"],
+                    scaled.get("X_val"),
+                    splits.get("y_val"),
+                    tune_hyperparams=tune_hyperparams,
+                )
 
-                    # Store model
-                    model_name = f"{target_col}_{model_type}"
-                    st.session_state.trained_models[model_name] = trainer
+                # 5. Store and Display Results
+                model_name = f"{target_col}_{model_type}"
+                st.session_state.trained_models[model_name] = trainer
+                st.subheader("Training Results")
 
-                    # Display results
-                    st.subheader("Training Results")
+                # ... [Continue with your existing plotting code here] ...
+                metrics = results["metrics"]
 
-                    metrics = results["metrics"]
-
-                    if problem_type == "regression":
-                        cols = st.columns(4)
-                        metrics_display = [
-                            ("R²", metrics.get("r2", 0), "#2ecc71"),
-                            ("RMSE", metrics.get("rmse", 0), "#e74c3c"),
-                            ("MAE", metrics.get("mae", 0), "#3498db"),
-                            ("MAPE", metrics.get("mape", 0), "#f39c12"),
-                        ]
-                        for col, (name, value, color) in zip(cols, metrics_display):
-                            with col:
-                                st.markdown(f"""
+                if problem_type == "regression":
+                    cols = st.columns(4)
+                    metrics_display = [
+                        ("R²", metrics.get("r2", 0), "#2ecc71"),
+                        ("RMSE", metrics.get("rmse", 0), "#e74c3c"),
+                        ("MAE", metrics.get("mae", 0), "#3498db"),
+                        ("MAPE", metrics.get("mape", 0), "#f39c12"),
+                    ]
+                    for col, (name, value, color) in zip(cols, metrics_display):
+                        with col:
+                            st.markdown(f"""
                                 <div style="background-color: {color}22; padding: 1rem; border-radius: 8px; text-align: center;">
                                     <div style="font-size: 0.9rem; color: {color};">{name}</div>
                                     <div style="font-size: 1.8rem; font-weight: bold; color: {color};">{value:.4f}</div>
                                 </div>
                                 """, unsafe_allow_html=True)
-                    else:
-                        cols = st.columns(4)
-                        metrics_display = [
-                            ("Accuracy", metrics.get("accuracy", 0), "#2ecc71"),
-                            ("Precision", metrics.get("precision", 0), "#3498db"),
-                            ("Recall", metrics.get("recall", 0), "#e74c3c"),
-                            ("F1 Score", metrics.get("f1_score", 0), "#f39c12"),
-                        ]
-                        for col, (name, value, color) in zip(cols, metrics_display):
-                            with col:
-                                st.markdown(f"""
+                else:
+                    cols = st.columns(4)
+                    metrics_display = [
+                        ("Accuracy", metrics.get("accuracy", 0), "#2ecc71"),
+                        ("Precision", metrics.get("precision", 0), "#3498db"),
+                        ("Recall", metrics.get("recall", 0), "#e74c3c"),
+                        ("F1 Score", metrics.get("f1_score", 0), "#f39c12"),
+                    ]
+                    for col, (name, value, color) in zip(cols, metrics_display):
+                        with col:
+                            st.markdown(f"""
                                 <div style="background-color: {color}22; padding: 1rem; border-radius: 8px; text-align: center;">
                                     <div style="font-size: 0.9rem; color: {color};">{name}</div>
                                     <div style="font-size: 1.8rem; font-weight: bold; color: {color};">{value:.4f}</div>
                                 </div>
                                 """, unsafe_allow_html=True)
 
-                    # CV scores
-                    if "cv_scores" in results:
-                        cv = results["cv_scores"]
-                        if "mean" in cv:
-                            st.info(f"Cross-validation: {cv['mean']:.4f} (+/- {cv['std']:.4f})")
+                # CV scores
+                if "cv_scores" in results:
+                    cv = results["cv_scores"]
+                    if "mean" in cv:
+                        st.info(
+                            f"Cross-validation: {cv['mean']:.4f} (+/- {cv['std']:.4f})")
 
-                    # Feature importance
-                    importance_df = trainer.get_feature_importance(feature_cols)
-                    if not importance_df.empty:
-                        st.subheader("Top Feature Importance")
-                        viz = Visualizer()
-                        fig = viz.plot_feature_importance(importance_df.head(15))
-                        st.pyplot(fig)
+                # Feature importance
+                importance_df = trainer.get_feature_importance(feature_cols)
+                if not importance_df.empty:
+                    st.subheader("Top Feature Importance")
+                    viz = Visualizer()
+                    fig = viz.plot_feature_importance(importance_df.head(15))
+                    st.pyplot(fig)
 
-                    # Prediction vs Actual plot for regression
-                    if problem_type == "regression":
-                        y_pred = trainer.predict(scaled["X_test"])
-                        viz = Visualizer()
-                        fig = viz.plot_regression_results(
-                            splits["y_test"].values, y_pred, target_name=target_col
-                        )
-                        st.pyplot(fig)
-                    else:
-                        # Confusion matrix for classification
-                        y_pred = trainer.predict(scaled["X_test"])
-                        viz = Visualizer()
-                        fig = viz.plot_confusion_matrix(
-                            splits["y_test"].values, y_pred, target_name=target_col
-                        )
-                        st.pyplot(fig)
+                # Prediction vs Actual plot for regression
+                if problem_type == "regression":
+                    y_pred = trainer.predict(scaled["X_test"])
+                    viz = Visualizer()
+                    fig = viz.plot_regression_results(
+                        splits["y_test"].values, y_pred, target_name=target_col
+                    )
+                    st.pyplot(fig)
+                else:
+                    # Confusion matrix for classification
+                    y_pred = trainer.predict(scaled["X_test"])
+                    viz = Visualizer()
+                    fig = viz.plot_confusion_matrix(
+                        splits["y_test"].values, y_pred, target_name=target_col
+                    )
+                    st.pyplot(fig)
 
-                except Exception as e:
-                    st.error(f"Training error: {e}")
-                    st.exception(e)
+            except Exception as e:
+                st.error(f"Training error: {e}")
+                st.exception(e)
 
 
 # =============================================================================
@@ -780,10 +823,12 @@ def render_model_training():
 
 def render_results_dashboard():
     """Render the results dashboard page."""
-    st.markdown('<p class="main-header">📈 Results Dashboard</p>', unsafe_allow_html=True)
+    st.markdown('<p class="main-header">📈 Results Dashboard</p>',
+                unsafe_allow_html=True)
 
     if not st.session_state.trained_models:
-        st.info("Train models first to see results here. Go to the 'Model Training' tab.")
+        st.info(
+            "Train models first to see results here. Go to the 'Model Training' tab.")
         return
 
     st.subheader("Model Performance Summary")
@@ -806,7 +851,8 @@ def render_results_dashboard():
     if len(st.session_state.trained_models) > 1:
         st.subheader("Model Comparison")
 
-        metric_to_plot = st.selectbox("Metric", ["r2", "rmse", "mae", "accuracy", "f1_score"])
+        metric_to_plot = st.selectbox(
+            "Metric", ["r2", "rmse", "mae", "accuracy", "f1_score"])
 
         fig = go.Figure()
         for name, trainer in st.session_state.trained_models.items():
@@ -833,7 +879,8 @@ def render_results_dashboard():
 
 def render_shap_explainability():
     """Render the SHAP explainability page."""
-    st.markdown('<p class="main-header">🤖 SHAP Explainability</p>', unsafe_allow_html=True)
+    st.markdown('<p class="main-header">🤖 SHAP Explainability</p>',
+                unsafe_allow_html=True)
     st.markdown("Understand how the model makes predictions using SHAP values.")
 
     smiles_input = st.text_input(
@@ -849,7 +896,8 @@ def render_shap_explainability():
         model_name = None
         st.info("Train a model first to see SHAP explanations.")
 
-    plot_type = st.selectbox("Plot Type", ["Waterfall", "Summary", "Dependence"])
+    plot_type = st.selectbox(
+        "Plot Type", ["Waterfall", "Summary", "Dependence"])
 
     if st.button("Generate Explanation", type="primary"):
         with st.spinner("Computing SHAP values..."):
@@ -873,7 +921,8 @@ def render_shap_explainability():
                     trainer = ModelTrainer()
                     # Create synthetic training for demo
                     from sklearn.ensemble import RandomForestRegressor
-                    trainer.model = RandomForestRegressor(n_estimators=10, random_state=42)
+                    trainer.model = RandomForestRegressor(
+                        n_estimators=10, random_state=42)
                     np.random.seed(42)
                     dummy_X = np.random.randn(50, len(feature_names))
                     dummy_y = np.random.randn(50)
@@ -884,6 +933,7 @@ def render_shap_explainability():
                     trainer.model,
                     feature_names=feature_names,
                 )
+                explainer.compute_shap_values(X)
 
                 if plot_type == "Waterfall":
                     fig = explainer.explain_local(X)
@@ -916,9 +966,11 @@ def render_shap_explainability():
                 with cols[0]:
                     st.metric("Total Features", total_features)
                 with cols[1]:
-                    st.metric("Top 10 Contribution", f"{100 * top_10_importance / total_importance:.1f}%")
+                    st.metric("Top 10 Contribution",
+                              f"{100 * top_10_importance / total_importance:.1f}%")
                 with cols[2]:
-                    st.metric("Most Important", importance_df.iloc[0]["feature"])
+                    st.metric("Most Important",
+                              importance_df.iloc[0]["feature"])
 
             except Exception as e:
                 st.error(f"Explanation error: {e}")
@@ -930,8 +982,23 @@ def render_shap_explainability():
 # =============================================================================
 
 def render_dataset_collection():
-    """Render the dataset collection page."""
+
     st.markdown('<p class="main-header">🔍 Dataset Collection</p>', unsafe_allow_html=True)
+    
+    # 1. Option to Upload Local CSV
+    st.subheader("Or Load Local Dataset")
+    uploaded_file = st.file_uploader("Upload a CSV file to use instead of PubChem", type=["csv"])
+    
+    if uploaded_file is not None:
+        df = pd.read_csv(uploaded_file)
+        st.success(f"Loaded {len(df)} compounds from local file.")
+        st.dataframe(df.head())
+        # Store in session state so it can be used for training
+        st.session_state.collected_data = df
+        return
+    """Render the dataset collection page."""
+    st.markdown('<p class="main-header">🔍 Dataset Collection</p>',
+                unsafe_allow_html=True)
     st.markdown("Collect chemical compound data directly from PubChem.")
 
     col1, col2 = st.columns(2)
@@ -946,8 +1013,10 @@ def render_dataset_collection():
         )
 
     with col2:
-        min_mw = st.number_input("Min Molecular Weight", min_value=10.0, value=50.0)
-        max_mw = st.number_input("Max Molecular Weight", min_value=50.0, value=1000.0)
+        min_mw = st.number_input(
+            "Min Molecular Weight", min_value=10.0, value=50.0)
+        max_mw = st.number_input(
+            "Max Molecular Weight", min_value=50.0, value=1000.0)
 
     if st.button("Collect from PubChem", type="primary"):
         progress_bar = st.progress(0)
@@ -976,19 +1045,23 @@ def render_dataset_collection():
                 with col2:
                     st.metric("Avg MW", f"{df['molecular_weight'].mean():.1f}")
                 with col3:
-                    st.metric("Avg LogP", f"{df['xlogp'].mean():.2f}" if "xlogp" in df.columns else "N/A")
+                    st.metric(
+                        "Avg LogP", f"{df['xlogp'].mean():.2f}" if "xlogp" in df.columns else "N/A")
 
                 # Visualizations
                 if "molecular_weight" in df.columns:
-                    fig = px.histogram(df, x="molecular_weight", title="Molecular Weight Distribution")
+                    fig = px.histogram(
+                        df, x="molecular_weight", title="Molecular Weight Distribution")
                     st.plotly_chart(fig, use_container_width=True)
 
                 if "xlogp" in df.columns:
-                    fig = px.histogram(df, x="xlogp", title="LogP Distribution")
+                    fig = px.histogram(
+                        df, x="xlogp", title="LogP Distribution")
                     st.plotly_chart(fig, use_container_width=True)
 
                 if "toxicity_category" in df.columns:
-                    toxicity_counts = df["toxicity_category"].value_counts().sort_index()
+                    toxicity_counts = df["toxicity_category"].value_counts(
+                    ).sort_index()
                     fig = px.bar(
                         x=toxicity_counts.index,
                         y=toxicity_counts.values,

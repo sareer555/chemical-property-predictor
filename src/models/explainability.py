@@ -18,18 +18,18 @@ Usage:
     >>> explainer.explain_local(X_test[0])
 """
 
+from src.utils.logger import get_model_logger
+from src.utils.config import settings
+import shap
+import pandas as pd
+import numpy as np
+import matplotlib.pyplot as plt
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple, Union
 
 import matplotlib
 matplotlib.use("Agg")  # Non-interactive backend
-import matplotlib.pyplot as plt
-import numpy as np
-import pandas as pd
-import shap
 
-from src.utils.config import settings
-from src.utils.logger import get_model_logger
 
 logger = get_model_logger()
 
@@ -86,31 +86,42 @@ class SHAPExplainer:
                 else:
                     # Fall back to KernelExplainer
                     if self.background_data is not None:
-                        bg = shap.sample(self.background_data, 100) if len(self.background_data) > 100 else self.background_data
-                        self.explainer = shap.KernelExplainer(self.model.predict, bg)
+                        bg = shap.sample(self.background_data, 100) if len(
+                            self.background_data) > 100 else self.background_data
+                        self.explainer = shap.KernelExplainer(
+                            self.model.predict, bg)
                     else:
-                        raise ValueError("background_data required for KernelExplainer")
+                        raise ValueError(
+                            "background_data required for KernelExplainer")
             elif self.explainer_type == "tree":
                 self.explainer = shap.TreeExplainer(self.model)
             elif self.explainer_type == "kernel":
                 if self.background_data is not None:
-                    bg = shap.sample(self.background_data, 100) if len(self.background_data) > 100 else self.background_data
-                    self.explainer = shap.KernelExplainer(self.model.predict, bg)
+                    bg = shap.sample(self.background_data, 100) if len(
+                        self.background_data) > 100 else self.background_data
+                    self.explainer = shap.KernelExplainer(
+                        self.model.predict, bg)
                 else:
-                    raise ValueError("background_data required for KernelExplainer")
+                    raise ValueError(
+                        "background_data required for KernelExplainer")
 
-            self.expected_value = getattr(self.explainer, "expected_value", None)
+            self.expected_value = getattr(
+                self.explainer, "expected_value", None)
             if isinstance(self.expected_value, np.ndarray):
                 self.expected_value = self.expected_value[0]
 
-            logger.info(f"SHAP explainer created: {type(self.explainer).__name__}")
+            logger.info(
+                f"SHAP explainer created: {type(self.explainer).__name__}")
 
         except Exception as e:
-            logger.warning(f"Could not create TreeExplainer: {e}. Trying KernelExplainer...")
+            logger.warning(
+                f"Could not create TreeExplainer: {e}. Trying KernelExplainer...")
             if self.background_data is not None:
-                bg = shap.sample(self.background_data, 100) if len(self.background_data) > 100 else self.background_data
+                bg = shap.sample(self.background_data, 100) if len(
+                    self.background_data) > 100 else self.background_data
                 self.explainer = shap.KernelExplainer(self.model.predict, bg)
-                self.expected_value = getattr(self.explainer, "expected_value", None)
+                self.expected_value = getattr(
+                    self.explainer, "expected_value", None)
 
     def compute_shap_values(
         self,
@@ -132,7 +143,8 @@ class SHAPExplainer:
         logger.info(f"Computing SHAP values for {len(X_arr)} samples...")
 
         if isinstance(self.explainer, shap.KernelExplainer):
-            self.shap_values = self.explainer.shap_values(X_arr, nsamples=nsamples)
+            self.shap_values = self.explainer.shap_values(
+                X_arr, nsamples=nsamples)
         else:
             self.shap_values = self.explainer.shap_values(X_arr)
 
@@ -181,7 +193,8 @@ class SHAPExplainer:
             feature_names=self.feature_names,
         )
 
-        plt.title("SHAP Feature Importance Summary", fontsize=14, fontweight="bold")
+        plt.title("SHAP Feature Importance Summary",
+                  fontsize=14, fontweight="bold")
         plt.tight_layout()
 
         if save_path:
@@ -209,7 +222,8 @@ class SHAPExplainer:
         Returns:
             Matplotlib figure
         """
-        X_arr = X_instance.values if hasattr(X_instance, "values") else X_instance
+        X_arr = X_instance.values if hasattr(
+            X_instance, "values") else X_instance
         if X_arr.ndim == 1:
             X_arr = X_arr.reshape(1, -1)
 
@@ -233,7 +247,8 @@ class SHAPExplainer:
         # Sort features by absolute SHAP value
         indices = np.argsort(np.abs(shap_values))[::-1][:20]
         sorted_shap = shap_values[indices]
-        sorted_features = [feature_names[i] if feature_names else f"Feature {i}" for i in indices]
+        sorted_features = [feature_names[i]
+                           if feature_names else f"Feature {i}" for i in indices]
         sorted_values = X_display[indices]
 
         # Colors based on direction
@@ -241,9 +256,11 @@ class SHAPExplainer:
 
         # Plot
         y_pos = np.arange(len(sorted_shap))
-        ax.barh(y_pos, sorted_shap, color=colors, edgecolor="white", linewidth=0.5)
+        ax.barh(y_pos, sorted_shap, color=colors,
+                edgecolor="white", linewidth=0.5)
         ax.set_yticks(y_pos)
-        ax.set_yticklabels([f"{f}\n({v:.3f})" for f, v in zip(sorted_features, sorted_values)])
+        ax.set_yticklabels(
+            [f"{f}\n({v:.3f})" for f, v in zip(sorted_features, sorted_values)])
         ax.invert_yaxis()
         ax.set_xlabel("SHAP Value (impact on prediction)", fontsize=12)
         ax.set_title("Local SHAP Explanation\n(Features ranked by impact on this prediction)",
@@ -287,14 +304,16 @@ class SHAPExplainer:
         Returns:
             Matplotlib figure
         """
-        X_arr = X_instance.values if hasattr(X_instance, "values") else X_instance
+        X_arr = X_instance.values if hasattr(
+            X_instance, "values") else X_instance
         if X_arr.ndim == 1:
             X_arr = X_arr.reshape(1, -1)
 
         if self.shap_values is None:
             self.compute_shap_values(X_arr)
 
-        X_display = pd.DataFrame(X_arr, columns=self.feature_names) if self.feature_names else X_arr
+        X_display = pd.DataFrame(
+            X_arr, columns=self.feature_names) if self.feature_names else X_arr
 
         fig, ax = plt.subplots(figsize=(14, 8))
 
@@ -302,7 +321,8 @@ class SHAPExplainer:
             shap.Explanation(
                 values=self.shap_values[index] if self.shap_values.ndim > 1 else self.shap_values,
                 base_values=self.expected_value if self.expected_value is not None else 0,
-                data=X_display.iloc[index] if hasattr(X_display, "iloc") else X_display[index],
+                data=X_display.iloc[index] if hasattr(
+                    X_display, "iloc") else X_display[index],
                 feature_names=self.feature_names,
             ),
             max_display=20,
@@ -353,7 +373,8 @@ class SHAPExplainer:
             ax=ax,
         )
 
-        plt.title(f"SHAP Dependence Plot: {feature}", fontsize=14, fontweight="bold")
+        plt.title(f"SHAP Dependence Plot: {feature}",
+                  fontsize=14, fontweight="bold")
         plt.tight_layout()
 
         if save_path:
@@ -372,11 +393,13 @@ class SHAPExplainer:
             DataFrame with feature names and mean |SHAP| values
         """
         if self.shap_values is None:
-            raise ValueError("SHAP values not computed. Call compute_shap_values() first.")
+            raise ValueError(
+                "SHAP values not computed. Call compute_shap_values() first.")
 
         mean_shap = np.abs(self.shap_values).mean(axis=0)
 
-        feature_names = self.feature_names or [f"feature_{i}" for i in range(len(mean_shap))]
+        feature_names = self.feature_names or [
+            f"feature_{i}" for i in range(len(mean_shap))]
 
         df = pd.DataFrame({
             "feature": feature_names[:len(mean_shap)],
@@ -459,15 +482,18 @@ class SHAPExplainer:
                     save_path=output_dir / f"shap_dependence_{i}_{feature}.png"
                 )
                 plt.close(fig)
-                saved_paths[f"dependence_{feature}"] = output_dir / f"shap_dependence_{i}_{feature}.png"
+                saved_paths[f"dependence_{feature}"] = output_dir / \
+                    f"shap_dependence_{i}_{feature}.png"
         except Exception as e:
             logger.warning(f"Dependence plot failed: {e}")
 
         # Feature importance CSV
         try:
             importance_df = self.get_feature_importance_df()
-            importance_df.to_csv(output_dir / "shap_feature_importance.csv", index=False)
-            saved_paths["importance_csv"] = output_dir / "shap_feature_importance.csv"
+            importance_df.to_csv(
+                output_dir / "shap_feature_importance.csv", index=False)
+            saved_paths["importance_csv"] = output_dir / \
+                "shap_feature_importance.csv"
         except Exception as e:
             logger.warning(f"Feature importance CSV failed: {e}")
 
