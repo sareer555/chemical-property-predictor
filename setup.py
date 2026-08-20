@@ -17,12 +17,12 @@ with open("requirements.txt", "r", encoding="utf-8") as fh:
 setup(
     name="chemical-property-predictor",
     version="1.0.0",
-    author="Computational Chemistry Research Group",
-    author_email="research@example.edu",
+    author="Sareer Ahmad",
+    author_email="sareerkh9194@gmail.com",
     description="End-to-end ML pipeline for predicting chemical properties from molecular structures",
     long_description=long_description,
     long_description_content_type="text/markdown",
-    url="https://github.com/username/chemical-property-predictor",
+    url="https://github.com/sareer555/chemical-property-predictor",
     packages=find_packages(where="src"),
     package_dir={"": "src"},
     classifiers=[
