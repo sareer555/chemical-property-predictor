@@ -205,15 +205,15 @@ def _compute_single_prediction(smiles: str, model: ModelTrainer) -> Dict:
     # Compute descriptors
     descriptors = DESCRIPTOR_GEN.compute_all(smiles)
 
-    # Convert to array
-    feature_names = list(descriptors.keys())
-    X = np.array([[descriptors[f] for f in feature_names]])
-
     # Predict
     if model.model is None:
         raise HTTPException(status_code=400, detail="Model not trained yet")
 
-    prediction = model.predict(X)[0]
+    # Reconstructs the exact feature subset/order/scaling this model was
+    # trained on (see ModelTrainer.predict_from_raw_descriptors) rather
+    # than feeding it every raw descriptor, which would mismatch the
+    # feature-selected + scaled input the model actually expects.
+    prediction = model.predict_from_raw_descriptors(descriptors)
 
     return {
         "prediction": float(prediction),
@@ -265,31 +265,23 @@ async def predict(request: PredictRequest):
         # Load model
         model = _load_or_create_model(request.model_name or "default")
 
-        # Compute prediction
+        # Compute prediction (uses the model's own feature-selection +
+        # scaling pipeline - see ModelTrainer.predict_from_raw_descriptors)
         result = _compute_single_prediction(canonical, model)
 
-        # Build response with all targets
-        predictions = {}
-
-        # If we have a multi-target setup, predict all
-        if hasattr(model, "predict") and model.model is not None:
-            descriptors = result["descriptors"]
-            feature_values = list(descriptors.values())
-            X = np.array([feature_values])
-
-            pred = model.predict(X)
-            if pred.ndim > 1:
-                target_names = ["boiling_point",
-                                "solubility", "toxicity_category"]
-                for i, name in enumerate(target_names[:pred.shape[1]]):
-                    predictions[name] = float(pred[0][i])
-            else:
-                predictions["value"] = float(pred[0])
+        # The loaded model predicts whichever single target it was trained
+        # on; label it by the model's registry name (e.g. "solubility_xgboost"
+        # -> "solubility") when we can infer it, else fall back to "value".
+        target_label = "value"
+        for candidate in ("solubility", "boiling_point", "toxicity_category"):
+            if candidate in (request.model_name or ""):
+                target_label = candidate
+                break
 
         return PredictResponse(
             smiles=request.smiles,
             canonical_smiles=canonical,
-            predictions=predictions or {"value": result["prediction"]},
+            predictions={target_label: result["prediction"]},
             descriptors=result["descriptors"],
             model_used=request.model_name or "default",
         )
@@ -371,11 +363,18 @@ async def train_model(
                 detail=f"Target column '{train_config.target_column}' not found. Available: {list(df.columns)}"
             )
 
-        # Prepare features
-        feature_cols = [c for c in df.columns if c !=
+        # Prepare features - numeric columns only (drops identifiers like
+        # 'smiles' that would otherwise reach the model as raw strings)
+        numeric_df = df.select_dtypes(include=[np.number])
+        if train_config.target_column not in numeric_df.columns:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Target column '{train_config.target_column}' must be numeric"
+            )
+        feature_cols = [c for c in numeric_df.columns if c !=
                         train_config.target_column]
-        X = df[feature_cols]
-        y = df[train_config.target_column]
+        X = numeric_df[feature_cols]
+        y = numeric_df[train_config.target_column]
 
         # Feature selection
         if train_config.feature_selection:
@@ -405,6 +404,13 @@ async def train_model(
             splits.get("y_val"),
             tune_hyperparams=train_config.tune_hyperparams,
         )
+
+        # Attach the feature-selection/scaling pipeline this model expects
+        # at inference time, so /predict and /explain can reconstruct the
+        # right input from a raw descriptor dict (see
+        # ModelTrainer.predict_from_raw_descriptors).
+        trainer.feature_names = feature_cols
+        trainer.scaler = preprocessor.feature_scaler
 
         # Save model
         model_name = f"{train_config.target_column}_{train_config.model_type}"
@@ -543,10 +549,16 @@ async def explain_prediction(request: ExplainRequest):
             raise HTTPException(
                 status_code=400, detail="Model not trained yet")
 
-        # Compute descriptors
+        # Compute descriptors, then reconstruct the exact feature
+        # subset/order/scaling this model was trained on (same helper
+        # /predict uses) so SHAP sees a vector shaped the way the model
+        # expects.
         descriptors = DESCRIPTOR_GEN.compute_all(canonical)
-        feature_names = list(descriptors.keys())
-        X = np.array([[descriptors[f] for f in feature_names]])
+        feature_names = model.feature_names or list(descriptors.keys())
+        row = [float(descriptors.get(name, 0.0)) for name in feature_names]
+        X = pd.DataFrame([row], columns=feature_names)
+        if model.scaler is not None:
+            X = model.scaler.transform(X)
 
         # Create SHAP explainer
         explainer = SHAPExplainer(

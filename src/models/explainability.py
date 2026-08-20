@@ -79,9 +79,7 @@ class SHAPExplainer:
                 # Auto-detect model type
                 model_type = type(self.model).__name__.lower()
 
-                if any(t in model_type for t in ["tree", "forest", "boosting", "gradient"]):
-                    self.explainer = shap.TreeExplainer(self.model)
-                elif "xgboost" in model_type:
+                if any(t in model_type for t in ["tree", "forest", "boosting", "gradient", "xgb"]):
                     self.explainer = shap.TreeExplainer(self.model)
                 else:
                     # Fall back to KernelExplainer

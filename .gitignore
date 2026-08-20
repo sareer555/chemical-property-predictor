@@ -54,6 +54,10 @@ venv.bak/
 *.pickle
 *.joblib
 !data/external/sample_data.csv
+# Bundled real dataset (Delaney/ESOL, 902 compounds, ~110KB) used as a
+# network-independent fallback when PubChem isn't reachable - see
+# src/data/delaney_loader.py.
+!data/external/delaney_dataset.csv
 
 # Model files (large trained models)
 *.pth

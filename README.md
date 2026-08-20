@@ -32,15 +32,30 @@ This project provides a **production-quality machine learning pipeline** for pre
 
 ### Predicted Properties
 
-| Property | Type | Description | Unit |
-|----------|------|-------------|------|
-| **Water Solubility** | Regression | Maximum concentration in water | mol/L |
-| **Boiling Point** | Regression | Temperature at atmospheric pressure | °C |
-| **Toxicity Category** | Classification | Hazard class based on structural features | 0-3 |
+| Property | Type | Description | Unit | Ground truth |
+|----------|------|-------------|------|---------------|
+| **Water Solubility** | Regression | Maximum concentration in water | standardized logS | **Real, measured** (Delaney/ESOL dataset) |
+| **Boiling Point** | Regression | Temperature at atmospheric pressure | °C | Heuristic estimate (not experimental) |
+| **Toxicity Category** | Classification | Hazard class based on structural features | 0-3 | Heuristic estimate (not experimental) |
+
+> **On "ground truth"**: only `solubility` is trained against real experimental
+> measurements. No free, redistributable experimental dataset for boiling
+> point or toxicity ships with this repo, so those two targets are generated
+> by simple structural-threshold formulas (`src/data/heuristics.py`) so the
+> multi-target pipeline has something to train end-to-end. Their near-perfect
+> classification/regression scores reflect the model re-deriving that known
+> formula from the same descriptors it was given as input, not real-world
+> predictive skill - see `reports/metrics.json` and treat them as a
+> demonstration of the *pipeline mechanics*, not a validated toxicity or
+> boiling-point predictor.
 
 ### Key Features
 
-- **Automated Data Collection**: Fetches compound data from PubChem REST API
+- **Automated Data Collection**: Fetches compound data from the PubChem REST
+  API (`src/data/pubchem_collector.py`). If PubChem isn't reachable from your
+  network (rate-limited, offline, sandboxed), `src/data/delaney_loader.py`
+  loads the bundled Delaney/ESOL solubility dataset (902 real compounds)
+  instead - see `scripts/run_full_pipeline.py --source {pubchem,delaney}`.
 - **2,000+ Molecular Descriptors**: Morgan fingerprints, MACCS keys, physicochemical & topological descriptors via RDKit
 - **Multiple ML Models**: Random Forest, Gradient Boosting, XGBoost with hyperparameter tuning
 - **SHAP Explainability**: Global and local model interpretation with waterfall plots

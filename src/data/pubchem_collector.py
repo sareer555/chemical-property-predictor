@@ -28,6 +28,11 @@ from rdkit import Chem
 from rdkit.Chem import Descriptors, Crippen, rdMolDescriptors
 from tqdm import tqdm
 
+from src.data.heuristics import (
+    estimate_boiling_point,
+    estimate_solubility_mol_per_l,
+    estimate_toxicity_category,
+)
 from src.utils.config import settings
 from src.utils.exceptions import DataCollectionError
 from src.utils.logger import get_data_logger
@@ -120,6 +125,30 @@ class PubChemCollector:
 
         raise DataCollectionError(
             f"Failed after {self.max_retries} attempts: {url}")
+
+    @staticmethod
+    def _get_search_term_pool() -> List[str]:
+        """
+        Pool of common compound names spanning several chemical classes,
+        used to diversify PubChem name-search results across batches.
+        """
+        return [
+            "ethanol", "methanol", "acetone", "benzene", "toluene", "aspirin",
+            "caffeine", "glucose", "ibuprofen", "acetic acid", "phenol",
+            "naphthalene", "chloroform", "acetaldehyde", "formaldehyde",
+            "propanol", "butanol", "hexane", "cyclohexane", "pyridine",
+            "aniline", "styrene", "urea", "citric acid", "lactic acid",
+            "glycerol", "sucrose", "fructose", "cholesterol", "penicillin",
+            "paracetamol", "nicotine", "morphine", "quinine", "camphor",
+            "menthol", "vanillin", "thymol", "indole", "imidazole",
+            "furan", "thiophene", "pyrrole", "piperidine", "quinoline",
+            "anthracene", "phenanthrene", "salicylic acid", "benzoic acid",
+            "oxalic acid", "malic acid", "tartaric acid", "ascorbic acid",
+            "adenine", "guanine", "cytosine", "thymine", "uracil",
+            "tryptophan", "tyrosine", "phenylalanine", "histidine",
+            "dopamine", "serotonin", "adrenaline", "testosterone",
+            "estradiol", "progesterone", "cortisol", "insulin",
+        ]
 
     def get_cids_by_search(self, term: str, n: int) -> List[int]:
         """Fetches CIDs by searching for a specific chemical name/class."""
@@ -298,21 +327,24 @@ class PubChemCollector:
         batch_size = min(self.batch_size, n)
         num_batches = (n + batch_size - 1) // batch_size
 
+        # Pool of search terms to diversify the collected compounds. A single
+        # fixed term (e.g. "ethanol") would return the same handful of CIDs
+        # every batch, which then collapse to ~1 row after de-duplication.
+        search_terms = self._get_search_term_pool()
+
         with tqdm(total=n, desc="Collecting compounds") as pbar:
             for batch_idx in range(num_batches):
                 remaining = n - len(all_compounds)
                 current_batch_size = min(batch_size, remaining)
 
                 try:
-                    # Get random CIDs
-                    # Inside your batch loop in collect_compounds:
-                    # Instead of get_random_cids, use:
+                    term = search_terms[batch_idx % len(search_terms)]
                     cids = self.get_cids_by_search(
-                        "ethanol", current_batch_size * 2)
-                # You can replace "ethanol" with a list of generic compound names
+                        term, current_batch_size * 2)
 
                     if not cids:
-                        logger.warning("No CIDs retrieved, skipping batch")
+                        logger.warning(
+                            f"No CIDs retrieved for '{term}', skipping batch")
                         continue
 
                     # Get properties
@@ -487,55 +519,17 @@ class PubChemCollector:
         Returns:
             DataFrame with toxicity_category column
         """
-        categories = []
-
-        for _, row in df.iterrows():
-            score = 0
-
-            # Molecular weight factor
-            mw = row.get("molecular_weight", 200)
-            if mw > 500:
-                score += 1
-
-            # LogP factor (high lipophilicity = higher toxicity)
-            logp = row.get("xlogp")
-            if logp and logp > 5:
-                score += 2
-            elif logp and logp > 3:
-                score += 1
-
-            # H-bond donors/acceptors
-            hbd = row.get("hbd", 0)
-            hba = row.get("hba", 0)
-            if hbd is None:
-                hbd = 0
-            if hba is None:
-                hba = 0
-
-            if hbd + hba > 12:
-                score += 1
-
-            # Complexity
-            complexity = row.get("complexity", 0)
-            if complexity and complexity > 500:
-                score += 1
-
-            # Formal charge
-            charge = row.get("charge", 0)
-            if charge and abs(charge) > 1:
-                score += 1
-
-            # Map score to category
-            if score <= 1:
-                category = 0  # Low toxicity
-            elif score <= 3:
-                category = 1  # Moderate
-            elif score <= 5:
-                category = 2  # High
-            else:
-                category = 3  # Very high
-
-            categories.append(category)
+        categories = [
+            estimate_toxicity_category(
+                molecular_weight=row.get("molecular_weight", 200),
+                logp=row.get("xlogp"),
+                hbd=row.get("hbd"),
+                hba=row.get("hba"),
+                complexity=row.get("complexity"),
+                charge=row.get("charge"),
+            )
+            for _, row in df.iterrows()
+        ]
 
         df["toxicity_category"] = categories
         return df
@@ -559,23 +553,13 @@ class PubChemCollector:
 
             if mol:
                 try:
-                    # Simplified estimation based on molecular weight and properties
-                    mw = row.get("molecular_weight", 200)
-                    logp = row.get("xlogp") or 0
-                    hba = row.get("hba") or 0
-                    hbd = row.get("hbd") or 0
-                    rb = row.get("rotatable_bonds") or 0
-
-                    # Base boiling point estimate
-                    bp = 100 + 0.5 * mw + 10 * logp - 15 * (hba + hbd) + 5 * rb
-
-                    # Add noise for realism
-                    import random
-                    bp += random.gauss(0, 20)
-
-                    # Clamp to reasonable range
-                    bp = max(-100, min(800, bp))
-                    bps.append(round(bp, 2))
+                    bps.append(estimate_boiling_point(
+                        molecular_weight=row.get("molecular_weight", 200),
+                        logp=row.get("xlogp"),
+                        hba=row.get("hba"),
+                        hbd=row.get("hbd"),
+                        rotatable_bonds=row.get("rotatable_bonds"),
+                    ))
                 except Exception:
                     bps.append(None)
             else:
@@ -600,29 +584,13 @@ class PubChemCollector:
 
         for _, row in df.iterrows():
             try:
-                logp = row.get("xlogp")
-                mw = row.get("molecular_weight", 200)
-                hba = row.get("hba") or 0
-                hbd = row.get("hbd") or 0
-                tpsa = row.get("tpsa") or 0
-
-                if logp is None:
-                    # Estimate LogP from MW if not available
-                    logp = 0.1 * mw ** 0.5 - 1
-
-                # Simplified solubility estimation (logS in mol/L)
-                log_s = 0.8 - 0.01 * (mw - 100) - 0.5 * \
-                    logp - 0.01 * tpsa + 0.3 * (hba + hbd)
-
-                # Add noise
-                import random
-                log_s += random.gauss(0, 0.5)
-
-                # Convert to solubility (mol/L)
-                sol = 10 ** log_s
-                sol = max(1e-10, min(100, sol))  # Clamp
-                solubilities.append(round(sol, 6))
-
+                solubilities.append(estimate_solubility_mol_per_l(
+                    molecular_weight=row.get("molecular_weight", 200),
+                    logp=row.get("xlogp"),
+                    hba=row.get("hba"),
+                    hbd=row.get("hbd"),
+                    tpsa=row.get("tpsa"),
+                ))
             except Exception:
                 solubilities.append(None)
 

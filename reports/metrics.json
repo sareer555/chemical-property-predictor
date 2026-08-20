@@ -1,0 +1,80 @@
+{
+  "source": "delaney",
+  "n_compounds": 902,
+  "n_features_selected": 150,
+  "best_regression_model": "xgboost",
+  "metrics": {
+    "solubility_random_forest": {
+      "mse": 0.11062415143673714,
+      "rmse": 0.33260209175039346,
+      "mae": 0.22775504705489247,
+      "r2": 0.8951017463731845,
+      "mape": 100.61348333510627
+    },
+    "solubility_gradient_boosting": {
+      "mse": 0.10665288959616974,
+      "rmse": 0.3265775399444514,
+      "mae": 0.22161930688959972,
+      "r2": 0.8988674559977103,
+      "mape": 130.72441306994668
+    },
+    "solubility_xgboost": {
+      "mse": 0.09728136365004844,
+      "rmse": 0.3118996050815846,
+      "mae": 0.21884635796796206,
+      "r2": 0.9077539124613218,
+      "mape": 160.6020280834504
+    },
+    "boiling_point_random_forest": {
+      "mse": 568.3279001062724,
+      "rmse": 23.839628774506377,
+      "mae": 18.390463978839495,
+      "r2": 0.8654870584190502,
+      "mape": 10.433213740510809
+    },
+    "boiling_point_gradient_boosting": {
+      "mse": 550.2384662895705,
+      "rmse": 23.457162366526145,
+      "mae": 18.00807956790937,
+      "r2": 0.8697685004418041,
+      "mape": 9.726216321036079
+    },
+    "boiling_point_xgboost": {
+      "mse": 538.5392632745397,
+      "rmse": 23.206448743281246,
+      "mae": 18.36194801625626,
+      "r2": 0.8725374903355084,
+      "mape": 10.100868252117538
+    },
+    "toxicity_category_random_forest": {
+      "accuracy": 1.0,
+      "precision": 1.0,
+      "recall": 1.0,
+      "f1_score": 1.0
+    },
+    "toxicity_category_gradient_boosting": {
+      "accuracy": 1.0,
+      "precision": 1.0,
+      "recall": 1.0,
+      "f1_score": 1.0
+    },
+    "toxicity_category_xgboost": {
+      "accuracy": 1.0,
+      "precision": 1.0,
+      "recall": 1.0,
+      "f1_score": 1.0
+    }
+  },
+  "saved_models": {
+    "solubility_random_forest": "/workspace/chemical-property-predictor/models/saved/solubility_random_forest.joblib",
+    "solubility_gradient_boosting": "/workspace/chemical-property-predictor/models/saved/solubility_gradient_boosting.joblib",
+    "solubility_xgboost": "/workspace/chemical-property-predictor/models/saved/solubility_xgboost.joblib",
+    "default": "/workspace/chemical-property-predictor/models/saved/default.joblib",
+    "boiling_point_random_forest": "/workspace/chemical-property-predictor/models/saved/boiling_point_random_forest.joblib",
+    "boiling_point_gradient_boosting": "/workspace/chemical-property-predictor/models/saved/boiling_point_gradient_boosting.joblib",
+    "boiling_point_xgboost": "/workspace/chemical-property-predictor/models/saved/boiling_point_xgboost.joblib",
+    "toxicity_category_random_forest": "/workspace/chemical-property-predictor/models/saved/toxicity_category_random_forest.joblib",
+    "toxicity_category_gradient_boosting": "/workspace/chemical-property-predictor/models/saved/toxicity_category_gradient_boosting.joblib",
+    "toxicity_category_xgboost": "/workspace/chemical-property-predictor/models/saved/toxicity_category_xgboost.joblib"
+  }
+}

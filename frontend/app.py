@@ -115,6 +115,43 @@ if "api_url" not in st.session_state:
 
 
 # =============================================================================
+# Real Model Loading (used by Single/Batch Prediction pages below)
+# =============================================================================
+
+@st.cache_resource(show_spinner=False)
+def load_saved_models() -> dict:
+    """
+    Load whichever trained models are on disk (models/saved/*.joblib),
+    keyed by target property (solubility, boiling_point, toxicity_category).
+    Prefers the xgboost variant of each target when more than one model
+    type was saved for it, since it's typically the strongest performer
+    (see reports/metrics.json from scripts/run_full_pipeline.py).
+
+    Returns {} if no models have been trained yet - callers should fall
+    back to telling the user to run scripts/run_full_pipeline.py or the
+    Model Training page rather than fabricating a prediction.
+    """
+    models = {}
+    if not settings.MODEL_DIR.exists():
+        return models
+
+    candidates = sorted(settings.MODEL_DIR.glob("*.joblib"))
+    for target in ["solubility", "boiling_point", "toxicity_category"]:
+        target_files = [p for p in candidates if p.stem.startswith(f"{target}_")]
+        if not target_files:
+            continue
+        # Prefer xgboost, then gradient_boosting, then whatever's left.
+        target_files.sort(key=lambda p: (
+            0 if "xgboost" in p.stem else 1 if "gradient_boosting" in p.stem else 2
+        ))
+        try:
+            models[target] = ModelTrainer.load_model(target_files[0])
+        except Exception:
+            continue
+    return models
+
+
+# =============================================================================
 # Sidebar
 # =============================================================================
 
@@ -334,75 +371,79 @@ def render_single_prediction():
                     gen = DescriptorGenerator()
                     descriptors = gen.compute_all(canonical)
 
-                    # Predictions
+                    # Predictions from the actual trained models (see
+                    # scripts/run_full_pipeline.py + models/saved/*.joblib),
+                    # not hand-written formulas. toxicity_category and
+                    # boiling_point are trained on heuristic/estimated
+                    # targets (see src/data/heuristics.py) rather than
+                    # measured lab data - flagged below.
+                    trained_models = load_saved_models()
+
                     st.subheader("Predicted Properties")
 
-                    pred_cols = st.columns(3)
+                    if not trained_models:
+                        st.warning(
+                            "No trained models found in models/saved/. "
+                            "Run `python scripts/run_full_pipeline.py` (or use the "
+                            "Model Training page) to train and save models first."
+                        )
+                    else:
+                        pred_cols = st.columns(3)
+                        labels = {
+                            "solubility": ("Water Solubility", "standardized logS", pred_cols[0]),
+                            "boiling_point": ("Boiling Point", "°C", pred_cols[1]),
+                            "toxicity_category": ("Toxicity Category", "", pred_cols[2]),
+                        }
+                        toxicity_labels = {0: "Low", 1: "Moderate", 2: "High", 3: "Very High"}
 
-                    # Placeholder predictions based on descriptors
-                    logp = descriptors.get("MolLogP", 0)
-                    mw = descriptors.get("MolWt", 200)
-                    tpsa = descriptors.get("TPSA", 50)
+                        for target, (label, unit, col) in labels.items():
+                            with col:
+                                if target not in trained_models:
+                                    st.metric(label, "not trained")
+                                    continue
+                                trainer = trained_models[target]
+                                value = trainer.predict_from_raw_descriptors(descriptors)
+                                if target == "toxicity_category":
+                                    display_value = toxicity_labels.get(int(round(value)), "Unknown")
+                                elif target == "solubility":
+                                    display_value = f"{value:.3f}"
+                                else:
+                                    display_value = f"{value:.1f}"
+                                st.metric(
+                                    label, display_value, unit or None,
+                                    help=f"Model: {trainer.model_type}",
+                                )
 
-                    # Simple estimation formulas for demo
-                    solubility = 10 ** (0.5 - 0.01 *
-                                        (mw - 100) - 0.5 * logp - 0.01 * tpsa)
-                    solubility = max(1e-10, min(100, solubility))
-
-                    bp = 100 + 0.5 * mw + 10 * logp
-                    bp = max(-100, min(800, bp))
-
-                    toxicity_score = (1 if mw > 500 else 0) + \
-                        (2 if logp > 5 else 1 if logp > 3 else 0)
-                    toxicity_labels = {
-                        0: "Low", 1: "Moderate", 2: "High", 3: "Very High"}
-                    toxicity = toxicity_labels.get(
-                        min(toxicity_score, 3), "Unknown")
-
-                    with pred_cols[0]:
-                        st.metric(
-                            "Water Solubility",
-                            f"{solubility:.2e}",
-                            "mol/L",
-                            help="Estimated water solubility",
+                        st.caption(
+                            "`solubility` is trained on real measured aqueous solubility "
+                            "(Delaney/ESOL dataset). `boiling_point` and `toxicity_category` "
+                            "are trained on formula-based heuristic estimates, not experimental "
+                            "measurements - see src/data/heuristics.py."
                         )
 
-                    with pred_cols[1]:
-                        st.metric(
-                            "Boiling Point",
-                            f"{bp:.1f}",
-                            "°C",
-                            help="Estimated boiling point",
+                        # Real cross-validated R²/F1 from training, not simulated bars
+                        st.subheader("Model Performance (from training)")
+                        perf_rows = []
+                        for target, trainer in trained_models.items():
+                            m = trainer.metrics or {}
+                            score = m.get("r2", m.get("f1_score"))
+                            metric_name = "R²" if "r2" in m else "F1"
+                            perf_rows.append({
+                                "Target": target, "Model": trainer.model_type,
+                                "Metric": metric_name, "Score": score,
+                            })
+                        perf_df = pd.DataFrame(perf_rows)
+                        fig = go.Figure()
+                        fig.add_trace(go.Bar(
+                            x=perf_df["Target"], y=perf_df["Score"],
+                            marker_color=["#3498db", "#e74c3c", "#2ecc71"][:len(perf_df)],
+                            text=perf_df["Metric"],
+                        ))
+                        fig.update_layout(
+                            title="Validation Set Performance (from scripts/run_full_pipeline.py)",
+                            yaxis_title="Score", yaxis_range=[0, 1], showlegend=False,
                         )
-
-                    with pred_cols[2]:
-                        st.metric(
-                            "Toxicity",
-                            toxicity,
-                            help="Estimated toxicity category",
-                        )
-
-                    # Confidence interval visualization
-                    st.subheader("Prediction Confidence")
-
-                    # Simulate confidence intervals
-                    fig = go.Figure()
-
-                    fig.add_trace(go.Bar(
-                        x=["Solubility", "Boiling Point", "Toxicity Score"],
-                        y=[0.75, 0.82, 0.68],
-                        error_y=dict(type="data", array=[0.08, 0.06, 0.12]),
-                        marker_color=["#3498db", "#e74c3c", "#2ecc71"],
-                    ))
-
-                    fig.update_layout(
-                        title="Model Confidence Scores",
-                        yaxis_title="R² Score",
-                        yaxis_range=[0, 1],
-                        showlegend=False,
-                    )
-
-                    st.plotly_chart(fig, use_container_width=True)
+                        st.plotly_chart(fig, use_container_width=True)
 
                 # Descriptor table
                 with st.expander("View All Descriptors"):
@@ -451,10 +492,19 @@ def render_batch_prediction():
         st.dataframe(df.head(), use_container_width=True)
 
         if st.button("Run Batch Prediction", type="primary"):
+            trained_models = load_saved_models()
+            if not trained_models:
+                st.warning(
+                    "No trained models found in models/saved/. Run "
+                    "`python scripts/run_full_pipeline.py` first."
+                )
+                st.stop()
+
             progress_bar = st.progress(0)
             status_text = st.empty()
 
             results = []
+            gen = DescriptorGenerator()
 
             for i, smiles in enumerate(df["smiles"]):
                 progress = (i + 1) / len(df)
@@ -468,26 +518,21 @@ def render_batch_prediction():
                         results.append({"smiles": smiles, "error": canonical})
                         continue
 
-                    gen = DescriptorGenerator()
                     descriptors = gen.compute_all(canonical)
 
-                    logp = descriptors.get("MolLogP", 0)
-                    mw = descriptors.get("MolWt", 200)
-                    tpsa = descriptors.get("TPSA", 50)
-
-                    solubility = 10 ** (0.5 - 0.01 *
-                                        (mw - 100) - 0.5 * logp - 0.01 * tpsa)
-                    bp = 100 + 0.5 * mw + 10 * logp
-
-                    results.append({
+                    row = {
                         "smiles": smiles,
                         "canonical_smiles": canonical,
-                        "solubility": max(1e-10, min(100, solubility)),
-                        "boiling_point": max(-100, min(800, bp)),
-                        "logp": logp,
-                        "mw": mw,
-                        "tpsa": tpsa,
-                    })
+                        "logp": descriptors.get("MolLogP", 0),
+                        "mw": descriptors.get("MolWt", 0),
+                        "tpsa": descriptors.get("TPSA", 0),
+                    }
+                    # Real predictions from the trained models, each using
+                    # its own saved feature-selection/scaling pipeline.
+                    for target, trainer in trained_models.items():
+                        row[target] = float(trainer.predict_from_raw_descriptors(descriptors))
+
+                    results.append(row)
                 except Exception as e:
                     results.append({"smiles": smiles, "error": str(e)})
 
@@ -889,12 +934,20 @@ def render_shap_explainability():
         help="SMILES of the molecule to explain",
     )
 
-    available_models = list(st.session_state.trained_models.keys())
+    saved_models = load_saved_models()
+    # Session-trained models (from the Model Training page) take priority
+    # since they reflect whatever the user just trained; persisted models
+    # from models/saved/ (scripts/run_full_pipeline.py) are the fallback.
+    available_models = list(st.session_state.trained_models.keys()) + \
+        [f"saved:{k}" for k in saved_models.keys()]
     if available_models:
         model_name = st.selectbox("Model", available_models)
     else:
         model_name = None
-        st.info("Train a model first to see SHAP explanations.")
+        st.info(
+            "No trained models available yet. Train one on the 'Model Training' "
+            "page, or run `python scripts/run_full_pipeline.py` to populate models/saved/."
+        )
 
     plot_type = st.selectbox(
         "Plot Type", ["Waterfall", "Summary", "Dependence"])
@@ -910,23 +963,32 @@ def render_shap_explainability():
                 # Compute descriptors
                 gen = DescriptorGenerator()
                 descriptors = gen.compute_all(canonical)
-                feature_names = list(descriptors.keys())
-                X = np.array([[descriptors[f] for f in feature_names]])
 
-                # Use trained model or create a default one
+                # Use a real trained model - session-trained (Model Training
+                # page) or persisted (models/saved/). No synthetic/untrained
+                # fallback: a SHAP plot for a model fit on random noise
+                # wouldn't mean anything, so we ask the user to train one
+                # instead of faking an explanation.
                 if model_name and model_name in st.session_state.trained_models:
                     trainer = st.session_state.trained_models[model_name]
+                elif model_name and model_name.startswith("saved:"):
+                    trainer = saved_models[model_name[len("saved:"):]]
                 else:
-                    st.info("Using a default untrained model for demonstration.")
-                    trainer = ModelTrainer()
-                    # Create synthetic training for demo
-                    from sklearn.ensemble import RandomForestRegressor
-                    trainer.model = RandomForestRegressor(
-                        n_estimators=10, random_state=42)
-                    np.random.seed(42)
-                    dummy_X = np.random.randn(50, len(feature_names))
-                    dummy_y = np.random.randn(50)
-                    trainer.model.fit(dummy_X, dummy_y)
+                    st.error(
+                        "No trained model selected. Train one on the 'Model Training' "
+                        "page, or run scripts/run_full_pipeline.py first."
+                    )
+                    return
+
+                # Reconstruct the exact feature subset/order/scaling this
+                # model was trained on (same helper the API uses).
+                feature_names = trainer.feature_names or list(descriptors.keys())
+                row = [float(descriptors.get(name, 0.0)) for name in feature_names]
+                X = pd.DataFrame([row], columns=feature_names)
+                if trainer.scaler is not None:
+                    X = trainer.scaler.transform(X)
+                else:
+                    X = X.values
 
                 # Create SHAP explainer
                 explainer = SHAPExplainer(
@@ -982,13 +1044,13 @@ def render_shap_explainability():
 # =============================================================================
 
 def render_dataset_collection():
-
+    """Render the dataset collection page."""
     st.markdown('<p class="main-header">🔍 Dataset Collection</p>', unsafe_allow_html=True)
-    
+
     # 1. Option to Upload Local CSV
-    st.subheader("Or Load Local Dataset")
+    st.subheader("Option A: Upload a Local Dataset")
     uploaded_file = st.file_uploader("Upload a CSV file to use instead of PubChem", type=["csv"])
-    
+
     if uploaded_file is not None:
         df = pd.read_csv(uploaded_file)
         st.success(f"Loaded {len(df)} compounds from local file.")
@@ -996,10 +1058,14 @@ def render_dataset_collection():
         # Store in session state so it can be used for training
         st.session_state.collected_data = df
         return
-    """Render the dataset collection page."""
-    st.markdown('<p class="main-header">🔍 Dataset Collection</p>',
-                unsafe_allow_html=True)
-    st.markdown("Collect chemical compound data directly from PubChem.")
+
+    st.subheader("Option B: Collect from PubChem")
+    st.markdown(
+        "Collect chemical compound data directly from PubChem. "
+        "Requires network access to pubchem.ncbi.nlm.nih.gov - if that's "
+        "unreachable from your environment, use the CSV upload above with "
+        "`data/external/delaney_dataset.csv` (bundled real solubility data) instead."
+    )
 
     col1, col2 = st.columns(2)
 

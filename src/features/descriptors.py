@@ -16,9 +16,9 @@ Features:
 Usage:
     >>> from src.features.descriptors import DescriptorGenerator
     >>> gen = DescriptorGenerator()
-    >>> descriptors = gen.compute_all("CCO")
-    >>> print(descriptors.shape)
-    (1, 2155)
+    >>> descriptors = gen.compute_all("CCO")  # dict of {descriptor_name: value}
+    >>> len(descriptors)
+    2515
 """
 
 import logging
@@ -35,6 +35,7 @@ from rdkit.Chem import (
     Crippen,
     Lipinski,
     rdMolDescriptors,
+    rdFingerprintGenerator,
     GraphDescriptors,
 )
 from rdkit.Chem.rdMolDescriptors import (
@@ -139,9 +140,10 @@ class DescriptorGenerator:
         Returns:
             Morgan fingerprint as bit vector or numpy array
         """
-        fp = AllChem.GetMorganFingerprintAsBitVect(
-            mol, radius=self.morgan_radius, nBits=self.morgan_nbits
+        generator = rdFingerprintGenerator.GetMorganGenerator(
+            radius=self.morgan_radius, fpSize=self.morgan_nbits
         )
+        fp = generator.GetFingerprint(mol)
         if as_array:
             return np.array(fp)
         return fp
