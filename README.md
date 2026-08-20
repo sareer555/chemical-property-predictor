@@ -115,7 +115,7 @@ This project provides a **production-quality machine learning pipeline** for pre
 
 ```bash
 # Clone the repository
-git clone https://github.com/username/chemical-property-predictor.git
+git clone https://github.com/sareer555/chemical-property-predictor.git
 cd chemical-property-predictor
 
 # Create virtual environment
@@ -463,9 +463,9 @@ If you use this project in your research, please cite:
 ```bibtex
 @software{chemical_property_predictor,
   title = {Chemical Property Prediction using Machine Learning and Molecular Descriptors},
-  author = {Computational Chemistry Research Group},
-  year = {2024},
-  url = {https://github.com/username/chemical-property-predictor}
+  author = {Sareer Ahmad},
+  year = {2026},
+  url = {https://github.com/sareer555/chemical-property-predictor}
 }
 ```
 
